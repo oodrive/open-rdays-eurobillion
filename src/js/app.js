@@ -102,7 +102,7 @@ App = {
 
         var result;
         if (parseInt(event.args.playerNumber) == parseInt(event.args.winingNumber)) {
-          result = "Have win!";
+          result = "Have won!";
         }
         else {
           result = "Lost his money :-(";

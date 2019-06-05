@@ -39,7 +39,7 @@ contract EuroBillions {
         return address(this).balance;
     }
 
-    // This function is used to register new user, and deposit initial funds.
+    // This function is used to register a new user and deposit initial funds.
     function register(string memory pseudo) public payable {
         require(bytes(pseudo).length > 0, "Pseudo cannot be empty.");
         require(bytes(userNames[msg.sender]).length == 0, "Cannot register twice.");
@@ -59,17 +59,17 @@ contract EuroBillions {
         uint winingNumber = (blockValue % 37);
         
         if (winingNumber == playerNumber) {
-            userBalances[msg.sender] += 35 * playerBet; // Player win!
+            userBalances[msg.sender] += 35 * playerBet; // Player wins!
         }
         else {
-            userBalances[msg.sender] -= playerBet;      // Player loose! Too bad, the contract will keep the money!
+            userBalances[msg.sender] -= playerBet;      // Player looses! Too bad, the contract will keep the money!
         }
 
-        // Raise an event with game result.
+        // Raise an event with game results.
         emit playEvent(now, msg.sender, playerBet, playerNumber, winingNumber);
     }
     
-    // Callback function receive the Ether send to a contract address.
+    // Callback function receives the Ether and transfers to the contract address.
     function () public payable {
         userBalances[msg.sender] += msg.value;
     }
