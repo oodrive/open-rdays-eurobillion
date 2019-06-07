@@ -90,14 +90,14 @@ App = {
 
   // Listen for events emitted from the contract
   listenForEvents: function() {
-    App.contracts.EuroBillions.deployed().then(function(instance) {
+    App.contracts.EuroBillions.deployed().then(function(euroBillionsInstance) {
       // Restart Chrome if you are unable to receive this event
       // This is a known issue with Metamask
       // https://github.com/MetaMask/metamask-extension/issues/2393
-      instance.playEvent({}, {
+      euroBillionsInstance.playEvent({}, {
         fromBlock: 0,
         toBlock: 'latest'
-      }).watch(function(error, event) {
+      }).watch(async function(error, event) {
         // This event is called everytime a user win or loose.
 
         var result;
@@ -107,50 +107,45 @@ App = {
         else {
           result = "Lost his money :-(";
         }
+
         var resultDate = new Date(0);
         resultDate.setUTCSeconds(event.args.date);
 
-        App.contracts.EuroBillions.deployed().then(function(instance) {
-          euroBillionsInstance = instance;
-          return euroBillionsInstance.userNames(event.args.player);
-        }).then(function(userName) {
-          var betTemplate = "<tr><td>" + resultDate.toLocaleString() + 
-                            "</td><th>" + userName + 
-                            "</th><td>" + (event.args.playerBet / OneEther).toFixed(3) + 
-                            "</td><td>" + event.args.playerNumber + 
-                            "</td><td>" + event.args.winingNumber + 
-                            "</td><td>" + result + "</td></tr>";
-          $("#betResults").prepend(betTemplate);
+        var betTemplate = "<tr><td>" + resultDate.toLocaleString() + 
+                          "</td><th>" + 
+                          "</th><td>" + (event.args.playerBet / OneEther).toFixed(3) + 
+                          "</td><td>" + event.args.playerNumber + 
+                          "</td><td>" + event.args.winingNumber + 
+                          "</td><td>" + result + "</td></tr>";
+        $("#betResults").prepend(betTemplate);
 
-          App.render();
-      });
-          });
+        // Store username element before "await" call to prevent out of order display
+        var userTh =$("#betResults").find("th").first();
+
+        var userName = await euroBillionsInstance.userNames(event.args.player);
+        userTh.html(userName);
+        });
     });
   },
 
-  render: function() {
-    var euroBillionsInstance;
-    var loader = $("#loader");
-    var registration = $("#registration");
-    var content = $("#content");
+  render: async function() {
+    try {
+      var loader = $("#loader");
+      var registration = $("#registration");
+      var content = $("#content");
 
-    loader.show();
-    content.hide();
-    registration.hide();
+      loader.show();
+      content.hide();
+      registration.hide();
 
-    $("#accountAddress").html("Your Ethereum account: " + App.account);
+      $("#accountAddress").html("Your Ethereum account: " + App.account);
 
-    // Load contract data
-    App.contracts.EuroBillions.deployed().then(function(instance) {
-      euroBillionsInstance = instance;
-      return euroBillionsInstance.userNames(App.account);
-    }).then(function(userName) {
-      App.UserName = userName;
-      return euroBillionsInstance.getBalance();
-    }).then(function(balance) {
+      // Load contract data
+      var euroBillionsInstance = await App.contracts.EuroBillions.deployed();
+      App.UserName = await euroBillionsInstance.userNames(App.account);
+      var balance = await euroBillionsInstance.getBalance();
+      var userBalance = await euroBillionsInstance.userBalances(App.account);
       $("#contractBalance").html("Jackpot: " + (balance / OneEther).toFixed(3) + " ETH");
-      return euroBillionsInstance.userBalances(App.account);
-    }).then(function(userBalance) {
       $("#accountBalance").html("Your deposit: " + (userBalance / OneEther).toFixed(3) + " ETH");
 
       loader.hide();
@@ -164,67 +159,62 @@ App = {
         $("#accountName").html("Connected as: " + App.UserName);
         content.show();
       }
-
-    }).catch(function(error) {
-      console.warn(error);
-    });
+    }
+    catch(err) {
+      console.log('Cannot render: ', err);
+    }
   },
     
-  registerUser: function() {
-    var userName = $('#userName').val();
-    var initialDeposit = parseInt($('#initialDeposit').val() * OneEther);
+  registerUser: async function() {
+    try {    
+      var userName = $('#userName').val();
+      var initialDeposit = parseInt($('#initialDeposit').val() * OneEther);
 
-    App.contracts.EuroBillions.deployed().then(function(instance) {
-      instance.register(userName, { from: App.account, value: initialDeposit, gas: 300000 })
-      .then(function(result) {
-        App.render();
-      });
-    }).catch(function(err) {
-      console.error(err);
-    });
+      var euroBillionsInstance = await App.contracts.EuroBillions.deployed();
+      await euroBillionsInstance.register(userName, { from: App.account, value: initialDeposit, gas: 300000 });
+      App.render();
+    } catch(err) {
+      console.info('Cannot register: ' + err);
+    }
   },
 
-  play: function() {   
-    var bet = parseFloat($('#bet').val()) * OneEther;
-    var guess = parseInt($('#guess').val());
-    App.contracts.EuroBillions.deployed().then(function(instance) {
-        instance.play(bet, guess);
-      })
+  play: async function() {
+    try {
+      var bet = parseFloat($('#bet').val()) * OneEther;
+      var guess = parseInt($('#guess').val());
+      var euroBillionsInstance = await App.contracts.EuroBillions.deployed();
+      euroBillionsInstance.play(bet, guess);
+    } catch(err) {
+      console.log('Cannot play: ' + err);
+    }
   },
 
-  cheatCasino: function() {
-    var appEuroBillions;
-    var appHackEuroBillions;
-    $("#cheatMessage").html("");
-    App.contracts.HackEuroBillions.deployed()
-    .then(function(instance) {
-      appHackEuroBillions = instance;
-    }).then(function() {
-      App.contracts.EuroBillions.deployed()
-      .then(function(instance) {
-        appEuroBillions = instance;
-        return appEuroBillions.userNames(appHackEuroBillions.address);
-      }).then(function(userName) {
-        // Register hacking contract (if needed)
-        if (userName == null || userName.length == 0)
-        {
-          appHackEuroBillions.register(App.UserName, {value: 1*OneEther});
-        }
-      }).then(function() {
-        // Cheat!
-        var bet = parseFloat($('#bet').val()) * OneEther;
-        appHackEuroBillions.CheatPlay(bet, {gas: 800000, gasPrice: web3.toWei(80,'gwei')})  // Boost gas price for faster demo
-        .then(function(){
-          return appEuroBillions.userBalances(appHackEuroBillions.address);
-        }).then(function(hackBalance){
-          // Withdraw money on hack contract address
-          appHackEuroBillions.StealMoney(hackBalance-OneEther, {gas: 800000, gasPrice: web3.toWei(80,'gwei')}).then(function(){
-            $("#cheatMessage").html("Steal: " + (hackBalance-OneEther)/OneEther + " ETH");
-            App.render();
-          })
-        });
-      })
-    });
+  cheatCasino: async function() {
+    try {    
+      $("#cheatMessage").html("");
+
+      var hackEuroBillionsInstance = await App.contracts.HackEuroBillions.deployed();
+      var euroBillionsInstance = await App.contracts.EuroBillions.deployed();
+      var userName = await euroBillionsInstance.userNames(hackEuroBillionsInstance.address);
+
+      // Register hacking contract (if needed)
+      if (userName == null || userName.length == 0)
+      {
+        await hackEuroBillionsInstance.register(App.UserName, {value: 1*OneEther});
+      }
+
+      // Cheat!
+      var bet = parseFloat($('#bet').val()) * OneEther;
+      await hackEuroBillionsInstance.CheatPlay(bet, {gas: 800000, gasPrice: web3.toWei(80,'gwei')})  // Boost gas price for faster demo
+
+      // Transfer steal money from hack contract to user
+      await hackEuroBillionsInstance.StealMoney(bet*35, {gas: 800000, gasPrice: web3.toWei(80,'gwei')});
+      $("#cheatMessage").html("Steal: " + (bet*35)/OneEther + " ETH");
+
+      App.render();
+    } catch(err) {
+      console.log('Cannot hack: ' + err);
+    }
   }
 };
 
